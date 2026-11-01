@@ -1,0 +1,32 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "All Rights Reserved"
+
+[[mods]]
+modId = "realflight"
+version = "1.0.0"
+displayName = "Real World Flight"
+description = '''
+Add-on for Adventures in Time (AIT Forger). Switches on AiT's real world flight (flying the TARDIS exterior around the overworld) and lets survival players use it from the console's visualiser control.
+'''
+
+[[dependencies.realflight]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.realflight]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,1.21)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.realflight]]
+modId = "ait"
+mandatory = false
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
