@@ -93,44 +93,68 @@ public final class FlightEvents {
             if (last != null && now - last < 10) return true;
             COOLDOWN.put(sp.getUUID(), now);
 
+            if (sp.isShiftKeyDown()) return true;
             enableFlight();
             Object tardis = AitBridge.call(AitBridge.call(target, "tardis"), "get");
-            ServerLevel world = sp.serverLevel();
-
-            Object travel = AitBridge.call(tardis, "travel");
-            boolean landed = "LANDED".equals(String.valueOf(AitBridge.call(travel, "getState")));
-            Class<?> idClass = AitBridge.findClass("dev.amble.ait.core.engine.SubSystem$Id");
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            Object gravId = Enum.valueOf((Class<? extends Enum>) idClass.asSubclass(Enum.class), "GRAVITATIONAL");
-            Object grav = AitBridge.call(AitBridge.call(tardis, "subsystems"), "get", gravId);
-            boolean gravOn = Boolean.TRUE.equals(AitBridge.call(grav, "isEnabled"));
-
-            if (sp.isShiftKeyDown()) return true;
-            if (!landed) {
-                sp.displayClientMessage(Component.literal("The TARDIS has to be landed to take off in real world flight."), true);
-                return true;
-            }
-            if (!gravOn) {
-                sp.displayClientMessage(Component.literal("The gravitational subsystem is offline."), true);
-                return true;
-            }
-            if (Boolean.TRUE.equals(AitBridge.call(AitBridge.call(tardis, "door"), "isOpen"))) {
-                world.playSound(null, sp.blockPosition(), SoundEvents.NOTE_BLOCK_BASS.value(), SoundSource.BLOCKS, 1f, 1f);
-                sp.displayClientMessage(Component.literal("Close the doors first."), true);
-                return true;
-            }
-
-            int min = FlightConfig.MIN_SPEED.get();
-            if (min > 0 && ((Number) AitBridge.call(travel, "speed")).intValue() < min) {
-                AitBridge.call(travel, "speed", min);
-            }
-            world.playSound(null, sp.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1f, 1f);
-            AitBridge.call(AitBridge.call(tardis, "flight"), "enterFlight", sp);
-            RealFlightMod.LOGGER.info("{} took off in real world flight", sp.getGameProfile().getName());
+            start(sp, tardis);
         } catch (Throwable t) {
             RealFlightMod.LOGGER.error("Could not start real world flight", t);
             sp.displayClientMessage(Component.literal("Real world flight failed to start (see latest.log)."), false);
         }
         return true;
+    }
+
+    /** Takes off: the same checks and steps as AiT's visualiser control, minus the creative-only rule. */
+    static void start(ServerPlayer sp, Object tardis) throws Exception {
+        ServerLevel world = sp.serverLevel();
+        Object travel = AitBridge.call(tardis, "travel");
+        boolean landed = "LANDED".equals(String.valueOf(AitBridge.call(travel, "getState")));
+        Class<?> idClass = AitBridge.findClass("dev.amble.ait.core.engine.SubSystem$Id");
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Object gravId = Enum.valueOf((Class<? extends Enum>) idClass.asSubclass(Enum.class), "GRAVITATIONAL");
+        Object grav = AitBridge.call(AitBridge.call(tardis, "subsystems"), "get", gravId);
+        boolean gravOn = Boolean.TRUE.equals(AitBridge.call(grav, "isEnabled"));
+
+        if (!landed) {
+            sp.displayClientMessage(Component.literal("The TARDIS has to be landed to take off in real world flight."), true);
+            return;
+        }
+        if (!gravOn) {
+            sp.displayClientMessage(Component.literal("The gravitational subsystem is offline."), true);
+            return;
+        }
+        int min = FlightConfig.MIN_SPEED.get();
+        if (min > 0 && ((Number) AitBridge.call(travel, "speed")).intValue() < min) {
+            AitBridge.call(travel, "speed", min);
+        }
+        world.playSound(null, sp.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1f, 1f);
+        AitBridge.call(AitBridge.call(tardis, "flight"), "enterFlight", sp);
+        RealFlightMod.LOGGER.info("{} took off in real world flight", sp.getGameProfile().getName());
+    }
+
+    @SubscribeEvent
+    public static void onCommands(net.minecraftforge.event.RegisterCommandsEvent event) {
+        event.getDispatcher().register(net.minecraft.commands.Commands.literal("realflight").executes(ctx -> {
+            ServerPlayer sp = ctx.getSource().getPlayerOrException();
+            if (!FlightConfig.ENABLE.get()) {
+                sp.displayClientMessage(Component.literal("Real world flight is switched off in the add-on's config."), false);
+                return 0;
+            }
+            try {
+                ModList.get().getModObjectById("ait").ifPresent(AitBridge::rememberLoader);
+                enableFlight();
+                Class<?> world = AitBridge.findClass("dev.amble.ait.core.world.TardisServerWorld");
+                if (!world.isInstance(sp.level())) {
+                    sp.displayClientMessage(Component.literal("Use this inside your TARDIS."), false);
+                    return 0;
+                }
+                start(sp, AitBridge.call(sp.level(), "getTardis"));
+            } catch (Throwable t) {
+                RealFlightMod.LOGGER.error("Could not start real world flight", t);
+                sp.displayClientMessage(Component.literal("Real world flight failed to start (see latest.log)."), false);
+                return 0;
+            }
+            return 1;
+        }));
     }
 }
